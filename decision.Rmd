@@ -1,0 +1,83 @@
+---
+title: "animeClassification"
+author: "Kelsey Ji"
+date: "2022-12-11"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+require("pairsD3")
+require("caret")
+require("glmnet")
+require("randomForest")
+require("rpart")
+require("rpart.plot")
+rm(list = ls())
+```
+Import File
+```{r}
+setwd("/Users/jixinge/Desktop/")
+anime = read.csv("anime - Sheet1.csv")
+covars=anime[,-1] #removes anime names
+covars=covars[,-12] #removes ProtagGender
+covars=covars[,-11] #removes popularity
+covars=covars[,-5] #removes PPC
+```
+
+split data into training and testing
+```{r}
+set.seed(18)
+shonen = sample(1:7, 1)
+shonen
+shojo = sample(8:14, 1)
+shojo
+test_index = c(shonen, shojo)
+train_data  = covars[-test_index, ] 
+test_data  = covars[test_index, ]
+```
+
+```{r}
+# Classification Tree with rpart
+train_data$Genre = as.factor(train_data$Genre)
+
+# grow tree
+fit <- rpart(Genre ~ ., method="class", data=train_data, control = rpart.control(minsplit =1,minbucket=1, cp=0.00001, xval = 10))
+
+
+printcp(fit) # display the results
+plotcp(fit) # visualize cross-validation results
+summary(fit) # detailed summary of splits
+
+# plot tree
+plot(fit, uniform=TRUE,
+   main="Classification Tree for Genre")
+text(fit, use.n=TRUE, all=TRUE, cex=.8)
+
+test_data$Genre = as.factor(test_data$Genre)
+
+pred = predict(fit, test_data)
+pred
+
+print("Predicted Genre for Demon Slayer: ")
+pred[1]
+print("Actual Genre for Demon Slayer: ")
+print(0)
+print("Is the prediction correct? ")
+print(FALSE)
+
+print("Predicted Popularity for Fruits Basket: ")
+pred[2]
+print("Actual Popularity for Fruits Basket: ")
+print(1)
+print("Is the prediction correct? ")
+print(FALSE)
+
+RMSE = RMSE(pred, test_data$Popularity)
+print("RMSE of the lasso fit is: ")
+RMSE #displays RMSE
+
+```

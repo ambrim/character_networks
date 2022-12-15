@@ -1,0 +1,225 @@
+---
+title: "anime"
+author: "Kelsey Ji"
+date: "2022-11-28"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+require("pairsD3")
+require("caret")
+require("glmnet")
+rm(list = ls())
+```
+Import File
+```{r}
+setwd("/Users/jixinge/Desktop/")
+anime = read.csv("anime - Sheet1.csv")
+covars=anime[,-1] #removes anime names
+cor(as.data.frame(covars))
+```
+We observed that there is perfect multicollinearity between Genre and Protag_Gender, so in the below regression we omit protag_gender from the regression.
+
+Similarly, since PPC is obtained from ProtagClique/Clique, there is perfect multicollinearity of PPC with ProtagClique and Clique. Thus in the below regression we omit PPC from the regression
+
+```{r}
+covars=covars[,-12] #removes ProtagGender
+covars=covars[,-4] #removesPPC
+```
+
+Plot every covariate against each other 
+```{r}
+pairs(covars) 
+```
+
+Opens up browser to view clearer relationships
+```{r}
+#shinypairs(covars)
+```
+
+split data into training and testing
+```{r}
+set.seed(1)
+shonen = sample(1:7, 1)
+shonen
+shojo = sample(8:14, 1)
+shojo
+test_index = c(shonen, shojo)
+train_data  = covars[-test_index, ] 
+test_data  = covars[test_index, ]
+```
+
+Fit a linear model onto train and view results
+```{r}
+fit=lm(train_data$Popularity~., data=train_data)
+summary(fit)
+
+pred = predict(fit, test_data)
+
+print("Predicted Popularity for Demon Slayer: ")
+pred[1]
+print("Actual Popularity for Demon Slayer: ")
+print(2593491)
+print("Differences: ")
+print(pred[1] - 2593491)
+
+print("Predicted Popularity for Fruits Basket: ")
+pred[2]
+print("Actual Popularity for Fruits Basket: ")
+print(712449)
+print("Differences: ")
+print(pred[2]-712449)
+
+RMSE = RMSE(pred, test_data$Popularity)
+print("RMSE of the linear fit is: ")
+RMSE #displays RMSE
+```
+
+We see that because we have 10 observations as well as 10 covariates and a constant term, we see that the linear model is perfectly fitted. As a result, we have over-fitted our observations. This calls for using lasso regression to penalize certain unimportant terms to zero. Below we implement lasso regression
+
+```{r}
+xfactors = model.matrix(train_data$Popularity ~ ., data = train_data)[, -1]
+
+x=as.matrix(data.frame(xfactors))
+y=as.matrix(as.data.frame(train_data$Popularity))
+
+#perform k-fold cross-validation to find optimal lambda value
+cv_model <- cv.glmnet(x, y, alpha = 1)
+
+#find optimal lambda value that minimizes test MSE
+best_lambda <- cv_model$lambda.min
+print(" ")
+print("The best log(lambda) for dropout regularization is: ")
+log(best_lambda)
+
+#produce plot of test MSE by lambda value
+plot(cv_model) 
+
+#find coefficients of best model
+fit <- glmnet(x, y, alpha = 1, lambda = best_lambda)
+coef(fit)
+
+xfp = model.matrix(test_data$Popularity ~ ., data = test_data)[, -1]
+xp=as.matrix(data.frame(xfp))
+yp=as.matrix(as.data.frame(test_data$Popularity))
+
+pred = predict(fit, xp, yp)
+
+print("Predicted Popularity for Demon Slayer: ")
+pred[1]
+print("Actual Popularity for Demon Slayer: ")
+print(2593491)
+print("Differences: ")
+print(pred[1] - 2593491)
+
+print("Predicted Popularity for Fruits Basket: ")
+pred[2]
+print("Actual Popularity for Fruits Basket: ")
+print(712449)
+print("Differences: ")
+print(pred[2]-712449)
+
+RMSE = RMSE(pred, test_data$Popularity)
+print("RMSE of the lasso fit is: ")
+RMSE #displays RMSE
+```
+As we can see from the results, Genre is deemed the most important predictor of anime popularity by lasso. 
+
+However, since our hypothesis is that there is a causal relationship between the network structure of the anime and its popularity, and genre isn't a network aspect, we proceed to clean up our covariates again so that only network-related covariates remain.
+
+Hence, Fem will also be dropped
+```{r}
+covars=covars[, -1] #removes Genre
+covars=covars[, -4] #removes Fem
+```
+
+split data into training and testing
+```{r}
+test_index = c(1, 11)
+train_data  = covars[-test_index, ] 
+test_data  = covars[test_index, ]
+```
+
+Run LinReg on reduced:
+```{r}
+set.seed(18)
+fit=lm(train_data$Popularity~., data=train_data)
+summary(fit)
+
+pred = predict(fit, test_data)
+
+print("Predicted Popularity for Demon Slayer: ")
+pred[1]
+print("Actual Popularity for Demon Slayer: ")
+print(2593491)
+print("Differences: ")
+print(pred[1] - 2593491)
+
+print("Predicted Popularity for Fruits Basket: ")
+pred[2]
+print("Actual Popularity for Fruits Basket: ")
+print(712449)
+print("Differences: ")
+print(pred[2]-712449)
+
+RMSE = RMSE(pred, test_data$Popularity)
+print("RMSE of the linear fit is: ")
+RMSE #displays RMSE
+```
+
+Attempting to run lasso drop out regression of popularity on only network-related features 
+```{r}
+xfactors = model.matrix(train_data$Popularity ~ ., data = train_data)[, -1]
+
+x=as.matrix(data.frame(xfactors))
+y=as.matrix(as.data.frame(train_data$Popularity))
+
+#perform k-fold cross-validation to find optimal lambda value
+cv_model <- cv.glmnet(x, y, alpha = 1)
+
+#find optimal lambda value that minimizes test MSE
+best_lambda <- cv_model$lambda.min
+print(" ")
+print("The best log(lambda) for dropout regularization is: ")
+log(best_lambda)
+
+#produce plot of test MSE by lambda value
+plot(cv_model) 
+
+#find coefficients of best model
+fit <- glmnet(x, y, alpha = 1, lambda = best_lambda)
+coef(fit)
+
+xfp = model.matrix(test_data$Popularity ~ ., data = test_data)[, -1]
+xp=as.matrix(data.frame(xfp))
+yp=as.matrix(as.data.frame(test_data$Popularity))
+
+pred = predict(fit, xp, yp)
+pred
+
+print("Predicted Popularity for Demon Slayer: ")
+pred[1]
+print("Actual Popularity for Demon Slayer: ")
+print(2593491)
+print("Differences: ")
+print(pred[1] - 2593491)
+
+print("Predicted Popularity for Fruits Basket: ")
+pred[2]
+print("Actual Popularity for Fruits Basket: ")
+print(712449)
+print("Differences: ")
+print(pred[2]-712449)
+
+RMSE = RMSE(pred, test_data$Popularity)
+print("RMSE of the lasso fit is: ")
+RMSE #displays RMSE
+```
+From the results table here, we can conclude that the most important factors of a network are numChar, Clique, Fem, Negativity, and Neg_Relation. 
+
+Now, we proceed to check the accuracy of the model by usign cross validation on the test data.
+
